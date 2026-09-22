@@ -1,0 +1,116 @@
+<div class="page">
+  <header class="topbar">
+    <div class="brand">
+      <h1>排班技能路由仿真台</h1>
+      <span class="muted">SimPy 离散事件 · FastAPI · {{ dbKind() || '…' }}</span>
+    </div>
+    <div class="controls-row">
+      <label>场景
+        <select [value]="selectedId()" (change)="selectedId.set($any($event.target).value)">
+          @for (s of scenarios(); track s.id) {
+            <option [value]="s.id">{{ s.name }}</option>
+          }
+        </select>
+      </label>
+      <label>随机种子 <input type="number" [value]="seed()" (input)="seed.set(+$any($event.target).value)" style="width:90px"/></label>
+      <button class="primary" (click)="startRun()" [disabled]="running()">
+        {{ running() ? '仿真中…' : '▶ 运行仿真' }}
+      </button>
+      <button (click)="runComparison()">🔬 稀缺技能 A/B 对照（种子 42）</button>
+    </div>
+  </header>
+
+  @if (selectedScenario(); as sc) {
+    <div class="scenario-desc panel">
+      <strong>{{ sc.name }}</strong>
+      <span class="muted"> · 默认种子 {{ sc.default_seed }} · 观测 {{ sc.config.horizon_sec }} 秒 ·
+        {{ sc.config.call_types.length }} 类来电 · {{ sc.config.agents.length }} 名坐席</span>
+      <p class="muted">{{ sc.description }}</p>
+    </div>
+  }
+
+  <!-- A/B 挤占对照 -->
+  @if (compare(); as cmp) {
+    <div class="panel compare">
+      <h3>🔬 A/B 对照：同一场来电计划（同种子 42，ARRIVAL 完全一致），仅溢出规则不同
+        <button class="close" (click)="compare.set(null)">✕</button>
+      </h3>
+      <table>
+        <thead>
+          <tr><th>指标</th><th>A：专家只接反欺诈</th><th>B：普通等 30s 溢出给专家</th><th>解读</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>事件流哈希前缀</td>
+            <td class="mono">{{ shortHash(cmp.a!.eventHash) }}</td>
+            <td class="mono">{{ shortHash(cmp.b!.eventHash) }}</td>
+            <td class="muted">哈希不同说明路由事件流不同，而非随机输入不同</td>
+          </tr>
+          <tr><td>总来电 / 接通 / 放弃</td>
+            <td>{{ cmp.a!.total }} / {{ cmp.a!.answered }} / {{ cmp.a!.abandoned }}</td>
+            <td>{{ cmp.b!.total }} / {{ cmp.b!.answered }} / {{ cmp.b!.abandoned }}</td>
+            <td class="muted">总来电一致（{{ cmp.a!.total === cmp.b!.total ? '✅' : '❌' }}）</td></tr>
+          <tr><td>整体 SL</td>
+            <td>{{ fmtPct(cmp.a!.sl) }}</td><td>{{ fmtPct(cmp.b!.sl) }}</td><td></td></tr>
+          <tr class="hl">
+            <td><strong>反欺诈 fraud SL</strong>（VIP 优先级 3）</td>
+            <td [style.color]="'var(--green)'">{{ fmtPct(cmp.a!.slFraud) }}</td>
+            <td [style.color]="'var(--red)'">{{ fmtPct(cmp.b!.slFraud) }}</td>
+            <td>专家被普通长通话占用后，VIP 达标率下滑
+              （{{ fmtPct(cmp.a!.slFraud) }} → {{ fmtPct(cmp.b!.slFraud) }}）</td>
+          </tr>
+          <tr>
+            <td>普通 general SL</td>
+            <td>{{ fmtPct(cmp.a!.slGeneral) }}</td>
+            <td>{{ fmtPct(cmp.b!.slGeneral) }}</td>
+            <td>溢出短期缓解了普通线排队</td>
+          </tr>
+          <tr>
+            <td>普通来电由溢出承接比例</td>
+            <td>{{ fmtPct(cmp.a!.overflowShareGeneral) }}</td>
+            <td>{{ fmtPct(cmp.b!.overflowShareGeneral) }}</td>
+            <td class="muted">来源：ASSIGNED.overflow_rules_active 非空的比例</td>
+          </tr>
+          <tr><td>池占用率</td>
+            <td>{{ fmtPct(cmp.a!.occ) }}</td><td>{{ fmtPct(cmp.b!.occ) }}</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+  }
+
+  @if (run(); as r) {
+    <div class="run-meta">
+      <span class="badge badge-SIM_START mono">run {{ r.run_id.slice(0,8) }}</span>
+      <span class="muted">种子 <strong>{{ r.seed }}</strong> · {{ r.event_count }} 个事件 · 计划来电 {{ r.planned_calls }}</span>
+      <span class="muted mono hash" title="{{ r.event_hash }}">事件哈希 sha256:{{ shortHash(r.event_hash) }}</span>
+      @switch (verifyOk()) {
+        @case (true) { <span class="verify ok">✅ 存储事件重算哈希一致（数据未经前端篡改）</span> }
+        @case (false) { <span class="verify bad">❌ 哈希不一致</span> }
+        @default { <span class="muted">校验中…</span> }
+      }
+    </div>
+
+    <nav class="tabs">
+      <button [class.active]="tab()==='replay'" (click)="tab.set('replay')">⏯ 事件回放（暂停查因）</button>
+      <button [class.active]="tab()==='metrics'" (click)="tab.set('metrics')">📊 指标面板</button>
+    </nav>
+
+    @switch (tab()) {
+      @case ('replay') {
+        <section class="panel replay-panel">
+          <app-timeline-player [events]="r.events" (cursorChange)="cursor.set($event)"></app-timeline-player>
+        </section>
+      }
+      @case ('metrics') {
+        <app-metrics-dashboard [metrics]="r.metrics" [clientSide]="clientSideMetrics()"></app-metrics-dashboard>
+      }
+    }
+  } @else {
+    <div class="panel muted loading-box">{{ loading() ? '正在加载场景…' : '选择场景并运行仿真' }}</div>
+  }
+
+  <footer class="muted">
+    统计口径：所有数字均由后端事件流（ARRIVAL/ASSIGNED/ABANDONED/OVERFLOW/SHIFT_*/WRAP_*）推导，
+    前端不产生随机数；指标面板底部提供浏览器端遍历事件的独立复算对照。仿真用途，不接真实电话。
+  </footer>
+</div>

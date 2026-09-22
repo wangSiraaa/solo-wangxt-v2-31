@@ -1,0 +1,167 @@
+@if (metricsSig(); as m) {
+<div class="dash">
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">总来电 <small class="muted">ARRIVAL 计数</small></div>
+      <div class="card-value">{{ m.total_calls }}</div>
+      <div class="card-sub">全部 ARRIVAL 事件</div>
+    </div>
+    <div class="card">
+      <div class="card-label">接通 <small class="muted">ASSIGNED</small></div>
+      <div class="card-value" style="color:var(--green)">{{ m.answered }}</div>
+      <div class="card-sub">接通率 {{ pct(m.answer_rate) }}</div>
+    </div>
+    <div class="card">
+      <div class="card-label">放弃 <small class="muted">ABANDONED</small></div>
+      <div class="card-value" style="color:var(--red)">{{ m.abandoned }}</div>
+      <div class="card-sub">放弃率 <strong>{{ pct(m.abandon_rate) }}</strong></div>
+    </div>
+    <div class="card">
+      <div class="card-label">截止未决 <small class="muted">EXPIRED</small></div>
+      <div class="card-value muted">{{ m.expired }}</div>
+      <div class="card-sub">horizon 时仍排队</div>
+    </div>
+    <div class="card">
+      <div class="card-label">整体服务水平 <small class="muted">ASSIGNED.met_sla</small></div>
+      <div class="card-value" [style.color]="slColor(m.overall.sl)">{{ pct(m.overall.sl) }}</div>
+      <div class="card-sub">{{ m.overall.within_sla }}/{{ m.overall.answered }} ≤ {{ m.overall.sla_sec ?? '?' }}s</div>
+    </div>
+    <div class="card">
+      <div class="card-label">平均排队 <small class="muted">ASA</small></div>
+      <div class="card-value">{{ num(m.overall.asa) }}s</div>
+      <div class="card-sub">平均队列 {{ m.avg_queue_length.toFixed(2) }}</div>
+    </div>
+    <div class="card">
+      <div class="card-label">坐席池占用率 <small class="muted">(ON_CALL+WRAP)/在岗</small></div>
+      <div class="card-value">{{ pct(m.pooled_occupancy) }}</div>
+      <div class="card-sub">由坐席状态区间重建</div>
+    </div>
+  </div>
+
+  <div class="charts">
+    <div class="panel chart-panel">
+      <h3>等待时长分布 <small class="muted">（仅接通来电，来源 ASSIGNED.wait_sec；秒）</small></h3>
+      <div class="hist">
+        @for (b of hist(); track b.label) {
+          <div class="bar-col">
+            <div class="bar" [style.height.%]="b.pct" [title]="b.label+'s: '+b.count"></div>
+            <div class="bar-n">{{ b.count }}</div>
+            <div class="bar-l">{{ b.label }}</div>
+          </div>
+        }
+      </div>
+      <div class="pct-row muted">
+        p50 {{ num(m.wait_distribution_all_answered.p50) }}s ·
+        p80 {{ num(m.wait_distribution_all_answered.p80) }}s ·
+        p90 {{ num(m.wait_distribution_all_answered.p90) }}s ·
+        p95 {{ num(m.wait_distribution_all_answered.p95) }}s ·
+        p99 {{ num(m.wait_distribution_all_answered.p99) }}s ·
+        max {{ num(m.wait_distribution_all_answered['max']) }}s
+      </div>
+    </div>
+
+    <div class="panel chart-panel">
+      <h3>队列长度轨迹 <small class="muted">（每次事件后快照 queue_after 长度）</small></h3>
+      <svg viewBox="0 0 1000 120" preserveAspectRatio="none" class="q-svg">
+        <polygon [attr.points]="queueCurve().area" fill="rgba(79,140,255,.15)" />
+        <polyline [attr.points]="queueCurve().points" fill="none" stroke="var(--blue)" stroke-width="1.5"
+                  vector-effect="non-scaling-stroke" />
+      </svg>
+      <div class="pct-row muted">0 … {{ m.horizon_sec }}s · 峰值 {{ queueCurve().maxQ ?? '-' }} 人</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>各技能服务水平</h3>
+    <table>
+      <thead>
+        <tr><th>技能</th><th>来电</th><th>接通</th><th>放弃</th><th>放弃率</th><th>SL(≤门槛)</th><th>ASA(s)</th><th>p90(s)</th><th>溢出承接占比</th></tr>
+      </thead>
+      <tbody>
+        @for (row of skillRows(); track row.skill) {
+          <tr>
+            <td><strong>{{ row.skill }}</strong></td>
+            <td>{{ row.b.total }}</td>
+            <td>{{ row.b.answered }}</td>
+            <td style="color:var(--red)">{{ row.b.abandoned }}</td>
+            <td>{{ pct(row.b.abandon_rate) }}</td>
+            <td [style.color]="slColor(row.b.sl)"><strong>{{ pct(row.b.sl) }}</strong> <small class="muted">({{ row.b.within_sla }}/{{ row.b.answered }} &#64; {{ row.b.sla_sec ?? '?' }}s)</small></td>
+            <td>{{ num(row.b.asa) }}</td>
+            <td>{{ num(row.b.wait_p90) }}</td>
+            <td>{{ row.b.overflow_share == null ? '—' : pct(row.b.overflow_share) }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h3>各来电类型明细</h3>
+    <table>
+      <thead><tr><th>类型</th><th>总数</th><th>接通</th><th>放弃</th><th>过期</th><th>放弃率</th><th>SL</th><th>p50</th><th>p95</th></tr></thead>
+      <tbody>
+        @for (row of typeRows(); track row.typeKey) {
+          <tr><td class="mono">{{ row.typeKey }}</td><td>{{ row.b.total }}</td><td>{{ row.b.answered }}</td>
+          <td>{{ row.b.abandoned }}</td><td>{{ row.b.expired }}</td><td>{{ pct(row.b.abandon_rate) }}</td>
+          <td [style.color]="slColor(row.b.sl)">{{ pct(row.b.sl) }}</td>
+          <td>{{ num(row.b.wait_p50) }}</td><td>{{ num(row.b.wait_p95) }}</td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h3>坐席占用（按事件快照状态区间重建）</h3>
+    <table>
+      <thead><tr><th>坐席</th><th>在岗(s)</th><th>通话+整理(s)</th><th>占用率</th><th style="width:300px"></th></tr></thead>
+      <tbody>
+        @for (row of agentRows(); track row.agentId) {
+          <tr>
+            <td class="mono">{{ row.agentId }}</td>
+            <td>{{ row.a.staffed_sec.toFixed(0) }}</td>
+            <td>{{ row.a.busy_sec.toFixed(0) }}</td>
+            <td>{{ pct(row.a.occupancy) }}</td>
+            <td>
+              <div class="occ-track">
+                @for (iv of row.a.intervals; track $index) {
+                  <div class="occ-seg status-{{iv.status}}"
+                       [style.left.%]="(iv.start/m.horizon_sec)*100"
+                       [style.width.%]="Math.max(0.4,((iv.end-iv.start)/m.horizon_sec)*100)"
+                       title="{{iv.status}} {{iv.start.toFixed(0)}}–{{iv.end.toFixed(0)}}s"></div>
+                }
+              </div>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+    <div class="legend muted">
+      <span><span class="lg-dot" style="background:var(--red)"></span>ON_CALL</span>
+      <span><span class="lg-dot" style="background:var(--yellow)"></span>WRAP</span>
+      <span><span class="lg-dot" style="background:var(--green)"></span>AVAILABLE</span>
+      <span><span class="lg-dot" style="background:#555"></span>OFFLINE</span>
+    </div>
+  </div>
+
+  @if (clientSideSig(); as cs) {
+  <div class="panel verify">
+    <h3>浏览器端事件复算对照 <small class="muted">（不使用后端 metrics，直接遍历 events 重算，验证图表来源）</small></h3>
+    <table>
+      <thead><tr><th></th><th>后端 metrics</th><th>浏览器重算</th><th>一致</th></tr></thead>
+      <tbody>
+        <tr><td>总来电</td><td>{{ m.total_calls }}</td><td>{{ cs.total }}</td><td>{{ m.total_calls===cs.total ? '✅' : '❌' }}</td></tr>
+        <tr><td>接通</td><td>{{ m.answered }}</td><td>{{ cs.answered }}</td><td>{{ m.answered===cs.answered ? '✅' : '❌' }}</td></tr>
+        <tr><td>放弃率</td><td>{{ pct(m.abandon_rate) }}</td><td>{{ pct(cs.abandonRate) }}</td><td>{{ m.abandon_rate===cs.abandonRate ? '✅' : '❌' }}</td></tr>
+        <tr><td>整体 SL</td><td>{{ pct(m.overall.sl) }}</td><td>{{ pct(cs.sl) }}</td><td>{{ m.overall.sl===cs.sl ? '✅' : '❌' }}</td></tr>
+        <tr><td>等待 p90</td><td>{{ num(m.wait_distribution_all_answered.p90) }}</td><td>{{ num(cs.p90) }}</td><td>{{ m.wait_distribution_all_answered.p90===cs.p90 ? '✅' : '❌' }}</td></tr>
+        @for (sk of skillKeys(); track sk) {
+          <tr><td>{{ sk }} SL</td><td>{{ pct(m.by_skill[sk].sl) }}</td>
+          <td>{{ pct(cs.bySkill[sk]?.sl ?? null) }}</td>
+          <td>{{ m.by_skill[sk].sl===(cs.bySkill[sk]?.sl ?? null) ? '✅' : '❌' }}</td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+  }
+</div>
+}

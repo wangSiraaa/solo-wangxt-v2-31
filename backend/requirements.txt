@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+simpy
+SQLAlchemy>=2.0
+psycopg2-binary
+pydantic>=2
+httpx
+pytest

@@ -1,0 +1,34 @@
+.dash { display: flex; flex-direction: column; gap: 12px; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+.card-label { color: var(--muted); font-size: 12px; }
+.card-label small { display: block; font-size: 10.5px; margin-top: 1px; }
+.card-value { font-size: 26px; font-weight: 650; margin: 4px 0 2px; }
+.card-sub { font-size: 11.5px; color: var(--muted); }
+
+.charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.chart-panel h3 { font-size: 13.5px; margin-bottom: 10px; }
+.chart-panel h3 small { font-weight: 400; }
+
+.hist { display: flex; align-items: flex-end; gap: 4px; height: 150px; }
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.bar { width: 100%; max-width: 38px; background: linear-gradient(180deg, #6fa0ff, #3b6fdb); border-radius: 3px 3px 0 0; min-height: 1px; }
+.bar-n { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.bar-l { font-size: 9.5px; color: var(--muted); white-space: nowrap; transform: rotate(-35deg); transform-origin: top; height: 26px; }
+.pct-row { margin-top: 8px; font-size: 11.5px; }
+
+.q-svg { width: 100%; height: 150px; background: var(--panel2); border-radius: 6px; }
+
+.occ-track { position: relative; height: 14px; background: var(--panel2); border-radius: 4px; overflow: hidden; }
+.occ-seg { position: absolute; top: 0; bottom: 0; border-right: 1px solid rgba(0,0,0,.35); }
+.status-ON_CALL { background: var(--red); }
+.status-WRAP { background: var(--yellow); }
+.status-AVAILABLE { background: rgba(47,170,106,.55); }
+.status-OFFLINE { background: #444; }
+
+.legend { display: flex; gap: 16px; margin-top: 8px; font-size: 11.5px; }
+.lg-dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; }
+
+.verify h3 { margin-bottom: 8px; }
+.verify { border-color: rgba(155,93,229,.5); }

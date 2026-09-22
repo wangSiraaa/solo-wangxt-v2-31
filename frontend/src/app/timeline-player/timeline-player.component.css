@@ -1,0 +1,53 @@
+.player { display: flex; flex-direction: column; height: 100%; gap: 10px; }
+
+.controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.controls .spacer { flex: 1; }
+.controls .pos { color: var(--muted); font-size: 12.5px; }
+.controls label { display: flex; align-items: center; gap: 5px; font-size: 12.5px; }
+
+.scrub { width: 100%; accent-color: var(--blue); }
+
+.body { display: grid; grid-template-columns: 340px 1fr; gap: 12px; flex: 1; min-height: 0; }
+
+.event-list {
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel2);
+}
+.event-row {
+  display: grid;
+  grid-template-columns: 58px 118px 52px 1fr;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.event-row:hover { background: rgba(79,140,255,.08); }
+.event-row.active { background: rgba(79,140,255,.16); border-left: 3px solid var(--blue); padding-left: 6px; }
+.event-row .t { color: var(--muted); font-size: 11.5px; }
+.event-row .delta { text-align: right; color: var(--muted); font-size: 11px; }
+
+.detail { overflow-y: auto; padding-right: 4px; }
+.detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.detail-head h3 { font-size: 15px; }
+.reason { background: var(--panel2); border-left: 3px solid var(--blue); padding: 8px 12px; border-radius: 0 6px 6px 0; line-height: 1.6; }
+
+.snap-row { display: grid; grid-template-columns: 1fr 24px 1fr; gap: 6px; align-items: start; margin: 10px 0; }
+.snap h4, .ag-title { font-size: 13px; color: var(--muted); margin: 10px 0 6px; font-weight: 500; }
+.arrow { text-align: center; padding-top: 24px; color: var(--muted); font-size: 18px; }
+
+.ag-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.ag-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 3px 10px; font-size: 12px; background: var(--panel2);
+}
+.ag-chip.busy { border-color: rgba(224,82,77,.6); }
+.ag-chip.wrap { border-color: rgba(217,154,43,.6); }
+.ag-chip.off { opacity: .55; }
+.ag-name { font-weight: 500; }
+.ag-st { font-size: 11px; }
+.ag-call { font-size: 11px; color: #f08a86; }

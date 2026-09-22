@@ -1,0 +1,102 @@
+<div class="player">
+  <!-- 播放控制条 -->
+  <div class="controls">
+    <button (click)="play()" [disabled]="playing()">▶ 播放</button>
+    <button (click)="pause()" [disabled]="!playing()">⏸ 暂停</button>
+    <button (click)="step(-1)" [disabled]="cursor()===0">◀ 上一事件</button>
+    <button (click)="step(1)" [disabled]="cursor()===events.length-1">下一事件 ▶</button>
+    <span class="pos mono">事件 {{ cursor() }} / {{ events.length - 1 }} · t={{ fmt(current?.t) }}</span>
+    <span class="spacer"></span>
+    <label class="muted">速度
+      <select [value]="speed()" (change)="setSpeed(+$any($event.target).value)">
+        <option [value]="2">0.5x</option>
+        <option [value]="8">1x</option>
+        <option [value]="30">4x</option>
+        <option [value]="120">15x</option>
+      </select>
+    </label>
+    <label class="muted">过滤
+      <select [value]="eventKindFilter()" (change)="eventKindFilter.set($any($event.target).value)">
+        <option value="">全部</option>
+        @for (k of kindOptions(); track k) { <option [value]="k">{{ k }}</option> }
+      </select>
+    </label>
+  </div>
+
+  <input type="range" min="0" [max]="events.length-1" [value]="cursor()"
+         (input)="pause(); cursor.set(+$any($event.target).value)" class="scrub" />
+
+  <div class="body">
+    <!-- 左：事件列表 -->
+    <div class="event-list">
+      @for (ev of visibleEvents(); track ev.seq) {
+        <div class="event-row" [class.active]="ev.seq===cursor()" (click)="seek(ev)">
+          <span class="mono t">{{ fmt(ev.t) }}</span>
+          <span class="badge" [class]="'badge badge-'+ev.type">{{ ev.type }}</span>
+          <span class="who mono">{{ ev.call_id || ev.agent_id || '' }}</span>
+          <span class="delta">
+            {{ (ev.queue_after?.length ?? 0) - (ev.queue_before?.length ?? 0) > 0 ? '+' : '' }}{{ (ev.queue_after?.length ?? 0) - (ev.queue_before?.length ?? 0) }}
+            （{{ ev.queue_after?.length ?? 0 }}）
+          </span>
+        </div>
+      }
+    </div>
+
+    <!-- 右：暂停后查看「为什么队列变了」 -->
+    @if (current; as ev) {
+      <div class="detail">
+        <div class="detail-head">
+          <span class="badge badge-{{ev.type}}" [style.background]="colors[ev.type]+'33'" [style.color]="colors[ev.type]">{{ ev.type }}</span>
+          <h3>{{ explain(ev).title }}</h3>
+        </div>
+        <p class="reason"><strong>原因（reason={{ev.reason}}）：</strong>{{ explain(ev).detail }}</p>
+
+        <div class="snap-row">
+          <div class="snap">
+            <h4>事件前 · 队列 {{ ev.queue_before?.length ?? 0 }} 人</h4>
+            <table>
+              <thead><tr><th>来电</th><th>类型</th><th>已等(s)</th><th>溢出</th></tr></thead>
+              <tbody>
+                @for (q of ev.queue_before; track q.call_id) {
+                  <tr><td class="mono">{{q.call_id}}</td><td>{{q.language}}/{{q.skill}} <small class="muted">P{{q.priority}}</small></td>
+                  <td class="mono">{{q.waited.toFixed(1)}}</td>
+                  <td>@if(q.overflow_rules_active.length){<span class="badge badge-OVERFLOW">#{{q.overflow_rules_active.join(',')}}</span>}</td></tr>
+                }
+                @if(!ev.queue_before?.length){<tr><td colspan="4" class="muted">空</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <div class="arrow">→</div>
+          <div class="snap">
+            <h4>事件后 · 队列 {{ ev.queue_after?.length ?? 0 }} 人</h4>
+            <table>
+              <thead><tr><th>来电</th><th>类型</th><th>已等(s)</th><th>溢出</th></tr></thead>
+              <tbody>
+                @for (q of ev.queue_after; track q.call_id) {
+                  <tr><td class="mono">{{q.call_id}}</td><td>{{q.language}}/{{q.skill}} <small class="muted">P{{q.priority}}</small></td>
+                  <td class="mono">{{q.waited.toFixed(1)}}</td>
+                  <td>@if(q.overflow_rules_active.length){<span class="badge badge-OVERFLOW">#{{q.overflow_rules_active.join(',')}}</span>}</td></tr>
+                }
+                @if(!ev.queue_after?.length){<tr><td colspan="4" class="muted">空</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <h4 class="ag-title">坐席快照（事件后，结构性保证一人最多一通）</h4>
+        <div class="ag-grid">
+          @for (a of ev.agents_after; track a.agent_id) {
+            <div class="ag-chip" [class.busy]="a.status==='ON_CALL'" [class.wrap]="a.status==='WRAP'"
+                 [class.off]="a.status==='OFFLINE'">
+              <span class="dot dot-{{a.status}}"></span>
+              <span class="ag-name">{{a.name}}</span>
+              <span class="ag-st muted">{{a.status}}</span>
+              @if(a.current_call){<span class="mono ag-call">{{a.current_call}}</span>}
+              @if(a.pending_logout){<span class="badge badge-SHIFT_END_PENDING">延迟下班</span>}
+            </div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</div>
