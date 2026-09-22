@@ -1,0 +1,2 @@
+html, body { min-height: 100%; }
+button:disabled { opacity: .55; cursor: not-allowed; }

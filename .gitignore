@@ -22,4 +22,6 @@ node_modules/
 venv/
 __pycache__/
 .pytest_cache/
+.angular/
+frontend/dist/
 .DS_Store

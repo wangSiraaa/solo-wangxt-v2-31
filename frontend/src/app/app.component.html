@@ -1,0 +1,198 @@
+<main class="shell">
+  <header class="hero">
+    <div>
+      <p class="eyebrow">SimPy 离散事件 · 技能路由 · 排班评估</p>
+      <h1>客服技能路由仿真系统</h1>
+      <p>统计指标全部由后端事件流投影；前端只按时间重放事件，不生成随机数。</p>
+    </div>
+    <div class="controls">
+      <label>
+        场景
+        <select [(ngModel)]="selectedScenarioId" (ngModelChange)="onScenarioChange()">
+          <option *ngFor="let scenario of scenarios" [value]="scenario.id">{{ scenario.name }}</option>
+        </select>
+      </label>
+      <label>
+        随机种子
+        <input type="number" min="0" [(ngModel)]="seed" />
+      </label>
+      <button class="primary" (click)="runSimulation()" [disabled]="loading">
+        {{ loading ? '仿真中…' : '重新仿真' }}
+      </button>
+    </div>
+  </header>
+
+  <p class="error" *ngIf="error">{{ error }}</p>
+
+  <ng-container *ngIf="result">
+    <section class="metrics">
+      <article>
+        <span>放弃率</span>
+        <strong>{{ percent(result.metrics.overall.abandonment_rate) }}</strong>
+        <small>{{ result.metrics.overall.abandoned }}/{{ result.metrics.overall.offered }} 通</small>
+      </article>
+      <article>
+        <span>20 秒服务水平</span>
+        <strong>{{ percent(result.metrics.overall.service_level_20) }}</strong>
+        <small>{{ result.metrics.overall.answered_within_20s }} 通达标</small>
+      </article>
+      <article>
+        <span>平均等待</span>
+        <strong>{{ result.metrics.overall.average_wait ?? '—' }}s</strong>
+        <small>最大 {{ result.metrics.overall.max_wait }}s</small>
+      </article>
+      <article>
+        <span>一致结果种子</span>
+        <strong>{{ result.seed }}</strong>
+        <small>运行 #{{ result.run_id }}</small>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">
+        <h2>队列轨迹</h2>
+        <div class="playback">
+          <button (click)="step(-1)">上一事件</button>
+          <button class="primary" (click)="playing ? pause() : play()">
+            {{ playing ? '暂停' : '播放' }}
+          </button>
+          <button (click)="step(1)">下一事件</button>
+          <input type="range" min="0" [max]="maxTime" [(ngModel)]="currentTime" />
+          <time>{{ currentTime }}s</time>
+        </div>
+      </div>
+      <svg class="chart" viewBox="0 0 620 150" role="img" aria-label="队列长度轨迹">
+        <defs>
+          <clipPath id="played-clip">
+            <rect [attr.width]="(currentTime / (maxTime || 1)) * 620" height="150"></rect>
+          </clipPath>
+        </defs>
+        <line x1="0" y1="126" x2="620" y2="126" class="axis"></line>
+        <path [attr.d]="queuePath()" class="queue-line" clip-path="url(#played-clip)"></path>
+        <ng-container *ngFor="let point of queueLengthSeries; let i = index">
+          <circle
+            *ngIf="visiblePoint(point)"
+            [attr.cx]="(point.time / (maxTime || 1)) * 620"
+            [attr.cy]="138 - (point.length / maxQueueLength) * 114"
+            r="3"
+            class="queue-dot"
+          ></circle>
+        </ng-container>
+      </svg>
+    </section>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>事件审计轨迹</h2>
+        <div class="event-list">
+          <button
+            *ngFor="let event of result.events"
+            [class.active]="currentEvent?.id === event.id"
+            [class.future]="event.time > currentTime"
+            (click)="selectEvent(event)"
+          >
+            <b>{{ event.time }}s</b>
+            <span class="tag {{ event.type | lowercase }}">{{ event.type }}</span>
+            <em>{{ event.message }}</em>
+          </button>
+        </div>
+      </section>
+
+      <section class="panel explanation" *ngIf="currentEvent">
+        <h2>为什么队列发生变化？</h2>
+        <div class="event-head">
+          <span class="tag {{ currentEvent.type | lowercase }}">{{ currentEvent.type }}</span>
+          <time>{{ currentEvent.time }}s</time>
+        </div>
+        <p>{{ currentEvent.message }}</p>
+        <h3>原因</h3>
+        <p class="reason">{{ currentEvent.reason.detail }}</p>
+        <dl>
+          <ng-container *ngFor="let item of keyValues(currentEvent.reason.factors)">
+            <dt>{{ item.key }}</dt>
+            <dd>{{ item.value | json }}</dd>
+          </ng-container>
+        </dl>
+        <div class="queue-compare">
+          <div>
+            <h3>变化前队列 {{ currentEvent.queue_before.length }}</h3>
+            <ul>
+              <li *ngFor="let call of currentEvent.queue_before">
+                {{ call.call_id }} · {{ call.skill }} · P{{ call.priority }} · {{ call.waiting_for }}s
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h3>变化后队列 {{ currentEvent.queue_after.length }}</h3>
+            <ul>
+              <li *ngFor="let call of currentEvent.queue_after">
+                {{ call.call_id }} · {{ call.skill }} · P{{ call.priority }} · {{ call.waiting_for }}s
+              </li>
+            </ul>
+          </div>
+        </div>
+        <p class="agent-change" *ngIf="currentEvent.agent_after">
+          {{ currentEvent.agent_after.name }}：
+          {{ stateLabel(currentEvent.agent_before?.state) }}
+          → {{ stateLabel(currentEvent.agent_after.state) }}
+        </p>
+      </section>
+    </div>
+
+    <section class="panel">
+      <h2>坐席占用</h2>
+      <div class="agent-row" *ngFor="let agent of result.agent_timeline">
+        <div class="agent-meta">
+          <strong>{{ agent.name }}</strong>
+          <span>占用 {{ percent(agent.occupancy_pct) }} · 通话 {{ agent.talk_seconds }}s · 整理 {{ agent.wrap_seconds }}s</span>
+        </div>
+        <div class="timeline">
+          <div
+            *ngFor="let segment of playedSegments(agent.segments)"
+            class="segment {{ segment.state }}"
+            [style]="segmentStyle(segment.start, segment.end)"
+            [title]="segment.state + ' ' + segment.start + '-' + segment.end"
+          ></div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i class="busy"></i>通话</span>
+        <span><i class="wrap"></i>整理</span>
+        <span><i class="available"></i>空闲</span>
+      </div>
+    </section>
+
+    <div class="grid bottom">
+      <section class="panel">
+        <h2>等待分布</h2>
+        <table>
+          <thead><tr><th>区间</th><th>接听</th><th>放弃</th><th>合计</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let bucket of result.waiting_distribution">
+              <td>{{ bucket.lower ?? '∞' }}–{{ bucket.upper === null ? '∞' : bucket.upper }}s</td>
+              <td>{{ bucket.answered }}</td>
+              <td class="danger">{{ bucket.abandoned }}</td>
+              <td>{{ bucket.total }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <h2>各技能服务水平</h2>
+        <table>
+          <thead><tr><th>技能</th><th>来电量</th><th>SL20</th><th>放弃率</th><th>平均等待</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let entry of skillEntries()">
+              <td>{{ entry.key }}</td>
+              <td>{{ entry.value.offered }}</td>
+              <td>{{ percent(entry.value.service_level_20) }}</td>
+              <td>{{ percent(entry.value.abandonment_rate) }}</td>
+              <td>{{ entry.value.average_wait ?? '—' }}s</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </ng-container>
+</main>
